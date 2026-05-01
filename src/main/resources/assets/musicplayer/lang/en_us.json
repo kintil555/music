@@ -1,0 +1,28 @@
+{
+  "key.categories.musicplayer": "Music Player",
+  "key.musicplayer.open_gui": "Open Music Player (F9)",
+
+  "musicplayer.gui.title": "Music Player",
+  "musicplayer.gui.tab.local": "Local File",
+  "musicplayer.gui.tab.youtube": "YouTube",
+
+  "musicplayer.gui.label.filepath": "File Path (.wav / .aiff):",
+  "musicplayer.gui.label.yturl": "YouTube URL:",
+  "musicplayer.gui.label.volume": "Volume: %s%%",
+  "musicplayer.gui.label.loop": "Loop",
+  "musicplayer.gui.label.nowplaying": "Now Playing:",
+  "musicplayer.gui.label.idle": "No track loaded",
+  "musicplayer.gui.label.loading": "Loading...",
+  "musicplayer.gui.label.paused": "[PAUSED]",
+
+  "musicplayer.gui.btn.play": "▶  Play",
+  "musicplayer.gui.btn.pause": "⏸  Pause",
+  "musicplayer.gui.btn.resume": "▶  Resume",
+  "musicplayer.gui.btn.stop": "⏹  Stop",
+
+  "musicplayer.error.file_not_found": "§cFile not found!",
+  "musicplayer.error.invalid_url": "§cInvalid YouTube URL!",
+  "musicplayer.error.ytdlp_missing": "§cyt-dlp not found on PATH. Install yt-dlp first!",
+  "musicplayer.error.fetch_failed": "§cFailed to fetch audio stream.",
+  "musicplayer.error.unsupported": "§cUnsupported audio format! Use WAV or AIFF."
+}
