@@ -1,0 +1,89 @@
+name: Build Music Player Mod
+
+on:
+  push:
+    branches: [ main, master ]
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:   # bisa trigger manual dari GitHub UI
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # diperlukan untuk buat Release
+
+    steps:
+      # ── 1. Checkout ──────────────────────────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ── 2. Setup Java 21 ─────────────────────────────────────────────────────
+      - name: Setup Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      # ── 3. Cache Gradle ───────────────────────────────────────────────────────
+      - name: Cache Gradle packages
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+            .gradle/loom-cache
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties', 'gradle.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      # ── 4. Buat gradlew executable ────────────────────────────────────────────
+      - name: Make gradlew executable
+        run: chmod +x ./gradlew
+
+      # ── 5. Build mod ──────────────────────────────────────────────────────────
+      - name: Build mod
+        run: ./gradlew build --no-daemon --stacktrace
+        env:
+          # Pastikan Gradle tidak coba launch Minecraft client saat CI
+          GRADLE_OPTS: "-Dorg.gradle.daemon=false"
+
+      # ── 6. Upload artifact (tersedia di semua push/PR) ────────────────────────
+      - name: Upload mod JAR
+        uses: actions/upload-artifact@v4
+        with:
+          name: musicplayer-mod-${{ github.sha }}
+          path: build/libs/*[!sources].jar
+          retention-days: 30
+
+      # ── 7. Buat GitHub Release (hanya saat push tag v*) ──────────────────────
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: build/libs/*[!sources].jar
+          name: "Music Player Mod ${{ github.ref_name }}"
+          body: |
+            ## Music Player Mod ${{ github.ref_name }}
+
+            **Minecraft**: 1.21.11  
+            **Fabric Loader**: 0.18.1+  
+            **Fabric API**: Required
+
+            ### Cara Install
+            1. Install [Fabric Loader 0.18.1+](https://fabricmc.net/use/installer/)
+            2. Install [Fabric API](https://modrinth.com/mod/fabric-api)
+            3. Taruh file `.jar` ini di folder `mods/`
+            4. Untuk fitur YouTube: install [yt-dlp](https://github.com/yt-dlp/yt-dlp) dan tambahkan ke PATH
+
+            ### Penggunaan
+            - Tekan **F9** di dalam game untuk membuka Music Player
+            - Tab **Local File**: masukkan path file WAV/AIFF di komputer kamu
+            - Tab **YouTube**: masukkan URL YouTube (butuh yt-dlp di PATH)
+            - Kontrol: Play, Pause/Resume, Stop, Volume slider, Loop toggle
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
