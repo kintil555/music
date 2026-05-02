@@ -26,13 +26,14 @@ public class AudioManager {
 
     public enum State { IDLE, LOADING, PLAYING, PAUSED, ERROR }
 
-    private volatile State   state            = State.IDLE;
-    private volatile String  trackName        = "";
-    private volatile String  errorMessage     = "";
-    private volatile boolean looping          = false;
-    private volatile float   volume           = 0.8f;
-    private volatile int     downloadProgress = -1; // 0-100, -1 = unknown
-    private volatile String  statusText       = "";
+    private volatile State        state            = State.IDLE;
+    private volatile String       trackName        = "";
+    private volatile String       errorMessage     = "";
+    private volatile boolean      looping          = false;
+    private volatile float        volume           = 0.8f;
+    private volatile int          downloadProgress = -1;
+    private volatile String       statusText       = "";
+    private volatile AudioQuality quality          = AudioQuality.getDefault();
 
     private Clip         clip;
     private FloatControl gainControl;
@@ -46,16 +47,24 @@ public class AudioManager {
     private Consumer<String> onError;
     private Runnable         onTrackEnd;
 
-    public State   getState()            { return state; }
-    public String  getTrackName()        { return trackName; }
-    public String  getErrorMsg()         { return errorMessage; }
-    public boolean isLooping()           { return looping; }
-    public float   getVolume()           { return volume; }
-    public int     getDownloadProgress() { return downloadProgress; }
-    public String  getStatusText()       { return statusText; }
+    public State        getState()            { return state; }
+    public String       getTrackName()        { return trackName; }
+    public String       getErrorMsg()         { return errorMessage; }
+    public boolean      isLooping()           { return looping; }
+    public float        getVolume()           { return volume; }
+    public int          getDownloadProgress() { return downloadProgress; }
+    public String       getStatusText()       { return statusText; }
+    public AudioQuality getQuality()          { return quality; }
 
     public void setOnError(Consumer<String> cb) { this.onError    = cb; }
     public void setOnTrackEnd(Runnable cb)       { this.onTrackEnd = cb; }
+
+    public void setQuality(AudioQuality q) {
+        this.quality = q;
+        LOGGER.info("[MusicPlayer] Quality set to {}", q.label);
+    }
+
+    // ── Playback ──────────────────────────────────────────────────────────────
 
     public void playLocalFile(Path path) {
         if (!Files.exists(path)) { fireError("File not found: " + path.toAbsolutePath()); return; }
@@ -81,8 +90,8 @@ public class AudioManager {
         worker.submit(() -> {
             Path tempWav = null;
             try {
-                // 1. Cek cache — kalau sudah pernah download, langsung play
-                Path cached = YtDlpManager.getCachedWav(ytUrl);
+                // 1. Cek cache (per URL + kualitas, agar tidak mix cache beda kualitas)
+                Path cached = YtDlpManager.getCachedWav(ytUrl + "_q" + quality.ytDlpQuality);
                 if (cached != null && Files.exists(cached)) {
                     statusText = "Loading from cache...";
                     downloadProgress = 100;
@@ -102,23 +111,21 @@ public class AudioManager {
                 String ffmpegPath = FfmpegManager.getOrDownload(msg -> { statusText = msg; });
                 if (ffmpegPath == null) { fireError("ffmpeg not found."); return; }
 
-                // 4. Output ke folder cache
-                tempWav = YtDlpManager.buildCachePath(ytUrl);
+                // 4. Output ke cache
+                tempWav = YtDlpManager.buildCachePath(ytUrl + "_q" + quality.ytDlpQuality);
                 final Path wavFile = tempWav;
                 Files.deleteIfExists(wavFile);
 
                 statusText = "Downloading audio...";
                 downloadProgress = 15;
 
-                // Download format terkecil dulu (webm/opus/m4a), konversi ke WAV
-                // --audio-quality 5 = cukup bagus, encode lebih cepat dari 0
                 ProcessBuilder pb = new ProcessBuilder(
                         ytDlpPath,
                         "--no-playlist",
                         "-f", "bestaudio[ext=webm]/bestaudio[ext=m4a]/bestaudio",
                         "-x",
                         "--audio-format", "wav",
-                        "--audio-quality", "5",
+                        "--audio-quality", String.valueOf(quality.ytDlpQuality),
                         "--ffmpeg-location", ffmpegPath,
                         "--no-progress",
                         "-o", wavFile.toString(),
@@ -221,6 +228,8 @@ public class AudioManager {
     public void setVolume(float v) { this.volume = clamp(v, 0f, 1f); applyGain(); }
 
     public void shutdown() { stop(); worker.shutdownNow(); }
+
+    // ── Internal ──────────────────────────────────────────────────────────────
 
     @FunctionalInterface interface StreamSupplier { AudioInputStream get() throws Exception; }
 
