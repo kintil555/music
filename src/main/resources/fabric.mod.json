@@ -9,6 +9,7 @@
     "sources": "https://github.com/yourname/musicplayer-mod"
   },
   "license": "MIT",
+  "icon": "icon.png",
   "environment": "client",
   "entrypoints": {
     "client": [
