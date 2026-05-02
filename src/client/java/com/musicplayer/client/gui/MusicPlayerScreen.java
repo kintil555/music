@@ -6,6 +6,7 @@ import com.musicplayer.client.audio.YtDlpManager;
 import com.musicplayer.client.audio.YtSearchManager;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
+import net.minecraft.client.gui.Click;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.widget.ButtonWidget;
@@ -396,6 +397,7 @@ public class MusicPlayerScreen extends Screen {
         }
     }
 
+    @Override
     public void renderBackground(DrawContext ctx, int mx, int my, float delta) { /* no-op */ }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -405,7 +407,10 @@ public class MusicPlayerScreen extends Screen {
     private long lastClickTime = 0;
     private int  lastClickIdx  = -1;
 
-    public boolean mouseClicked(double mx, double my, int button) {
+    @Override
+    public boolean mouseClicked(Click click, boolean doubled) {
+        double mx = click.x();
+        double my = click.y();
         // Tutup dropdown jika klik di luar
         if (qualityDropdownOpen) {
             int ddX = panelX + panelW - 120;
@@ -446,7 +451,7 @@ public class MusicPlayerScreen extends Screen {
             }
         }
 
-        return super.mouseClicked(mx, my, button);
+        return super.mouseClicked(click, doubled);
     }
 
     @Override
