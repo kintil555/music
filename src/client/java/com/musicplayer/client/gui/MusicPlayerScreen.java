@@ -151,8 +151,8 @@ public class MusicPlayerScreen extends Screen {
 
     @Override
     public void render(DrawContext ctx, int mouseX, int mouseY, float delta) {
-        // Dim background
-        this.renderBackground(ctx, mouseX, mouseY, delta);
+        // Render background blur SEKALI di awal
+        super.renderBackground(ctx, mouseX, mouseY, delta);
 
         int w = this.width;
         int h = this.height;
@@ -223,8 +223,17 @@ public class MusicPlayerScreen extends Screen {
                 ? Text.translatable("musicplayer.gui.btn.resume")
                 : Text.translatable("musicplayer.gui.btn.pause"));
 
-        // Render semua widget
+        // Render semua widget (panggil super tapi renderBackground sudah di-override jadi no-op)
         super.render(ctx, mouseX, mouseY, delta);
+    }
+
+    /**
+     * Override renderBackground menjadi no-op agar super.render() tidak memanggil blur
+     * kedua kalinya. Background sudah di-render manual di awal method render().
+     */
+    @Override
+    public void renderBackground(DrawContext context, int mouseX, int mouseY, float delta) {
+        // Sengaja kosong — background dirender sekali di render() sebelum konten panel
     }
 
     // ─────────────────────────────────────────────────────────────────────────
