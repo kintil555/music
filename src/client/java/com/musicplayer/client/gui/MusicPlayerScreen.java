@@ -91,7 +91,7 @@ public class MusicPlayerScreen extends Screen {
     private int panelX, panelY, panelW, panelH;
 
     public MusicPlayerScreen() {
-        super(Text.literal("Music Player"));
+        super(Text.literal("Jukebox"));
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -226,7 +226,7 @@ public class MusicPlayerScreen extends Screen {
 
         // ── Title bar ─────────────────────────────────────────────────────────
         ctx.fill(panelX + 2, panelY + 2, panelX + panelW - 2, panelY + 20, MC_PANEL_INNER);
-        ctx.drawCenteredTextWithShadow(textRenderer, "Music Player",
+        ctx.drawCenteredTextWithShadow(textRenderer, "Jukebox",
                 this.width / 2, panelY + 7, MC_TEXT_YELLOW);
 
         // ── Tab underline separator ────────────────────────────────────────────

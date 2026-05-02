@@ -16,7 +16,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Client-side entrypoint untuk Music Player Mod.
+ * Client-side entrypoint untuk Jukebox Mod.
  *
  * Yang dilakukan di sini:
  *  1. Daftarkan keybinding F9 ("Open Music Player")
@@ -62,6 +62,6 @@ public class MusicPlayerClient implements ClientModInitializer {
             AudioManager.get().shutdown();
         });
 
-        LOGGER.info("[MusicPlayer] Client initialized. Press F9 to open Music Player.");
+        LOGGER.info("[MusicPlayer] Client initialized. Press F9 to open Jukebox.");
     }
 }

@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "id": "musicplayer",
   "version": "${version}",
-  "name": "Music Player",
-  "description": "Play music in-game from local files or YouTube links. Open with F9.",
+  "name": "Jukebox",
+  "description": "Play music in-game from local files or YouTube. Open with F9.",
   "authors": ["YourName"],
   "contact": {
     "sources": "https://github.com/yourname/musicplayer-mod"

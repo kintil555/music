@@ -1,8 +1,8 @@
 {
-  "key.categories.musicplayer": "Music Player",
-  "key.musicplayer.open_gui": "Open Music Player (F9)",
+  "key.categories.musicplayer": "Jukebox",
+  "key.musicplayer.open_gui": "Open Jukebox (F9)",
 
-  "musicplayer.gui.title": "Music Player",
+  "musicplayer.gui.title": "Jukebox",
   "musicplayer.gui.tab.local": "Local File",
   "musicplayer.gui.tab.youtube": "YouTube",
 
