@@ -1,67 +1,67 @@
 # 🎵 Music Player Mod — Fabric 1.21.11
 
-Mod Minecraft Fabric yang memungkinkan kamu memutar musik langsung di dalam game.  
-Tekan **F9** untuk membuka Music Player kapan saja.
+A Minecraft Fabric mod that allows you to play music directly inside the game.  
+Press **F9** to open the Music Player anytime.
 
 ---
 
-## ✨ Fitur
+## ✨ Features
 
-| Fitur | Keterangan |
+| Feature | Description |
 |---|---|
-| **Local File** | Putar file WAV / AIFF dari komputer kamu |
-| **YouTube** | Putar audio dari link YouTube (butuh yt-dlp) |
+| **Local File** | Play WAV / AIFF files from your computer |
+| **YouTube** | Play audio from YouTube links (requires yt-dlp) |
 | **Loop** | Toggle loop on/off |
-| **Pause / Resume** | Jeda dan lanjutkan lagu |
-| **Stop** | Hentikan playback |
-| **Volume Slider** | Atur volume 0–100% |
-| **Lightweight** | Tidak ada library eksternal — hanya Fabric API & JDK |
+| **Pause / Resume** | Pause and resume playback |
+| **Stop** | Stop playback |
+| **Volume Slider** | Adjust volume from 0–100% |
+| **Lightweight** | No external libraries — only Fabric API & JDK |
 
 ---
 
-## 📦 Versi yang Dibutuhkan
+## 📦 Requirements
 
-| Komponen | Versi |
+| Component | Version |
 |---|---|
 | Minecraft | **1.21.11** |
 | Fabric Loader | **≥ 0.18.1** |
-| Fabric API | **0.141.2+1.21.11** atau lebih baru |
+| Fabric API | **0.141.2+1.21.11** or newer |
 | Java | **21** |
-| yt-dlp (opsional) | Untuk fitur YouTube |
+| yt-dlp (optional) | Required for YouTube feature |
 
 ---
 
-## 🚀 Cara Install
+## 🚀 Installation
 
-1. Install [Fabric Loader 0.18.1+](https://fabricmc.net/use/installer/)
-2. Install [Fabric API](https://modrinth.com/mod/fabric-api) (taruh di folder `mods/`)
-3. Download `.jar` dari [Releases](../../releases) dan taruh di folder `mods/`
+1. Install Fabric Loader 0.18.1+: https://fabricmc.net/use/installer/
+2. Install Fabric API: https://modrinth.com/mod/fabric-api (place it in the `mods/` folder)
+3. Download the `.jar` from Releases and place it in the `mods/` folder
 
-### Untuk fitur YouTube
-Install **yt-dlp** dan pastikan ada di PATH sistem:
-- Windows: `winget install yt-dlp` atau download dari [github.com/yt-dlp/yt-dlp](https://github.com/yt-dlp/yt-dlp)
-- Linux/macOS: `pip install yt-dlp` atau `brew install yt-dlp`
+### For YouTube feature
+Install **yt-dlp** and make sure it is available in your system PATH:
+- Windows: `winget install yt-dlp` or download from https://github.com/yt-dlp/yt-dlp
+- Linux/macOS: `pip install yt-dlp` or `brew install yt-dlp`
 
 ---
 
-## 🎮 Cara Pakai
+## 🎮 Usage
 
-1. Masuk ke game, tekan **F9**
-2. Pilih tab:
-   - **Local File** → masukkan path lengkap file WAV/AIFF, contoh:  
-     `C:\Music\lagu.wav` atau `/home/user/music/lagu.wav`
-   - **YouTube** → masukkan URL YouTube, contoh:  
+1. Enter the game and press **F9**
+2. Choose a tab:
+   - **Local File** → enter the full file path (WAV/AIFF), for example:  
+     `C:\Music\song.wav` or `/home/user/music/song.wav`
+   - **YouTube** → enter a YouTube URL, for example:  
      `https://www.youtube.com/watch?v=dQw4w9WgXcQ`
-3. Klik **▶ Play**
-4. Atur volume dengan slider, toggle loop, atau pause/stop sesuai kebutuhan
+3. Click **▶ Play**
+4. Adjust volume, toggle loop, or pause/stop as needed
 
-> **Catatan format**: Untuk local file, gunakan WAV atau AIFF.  
-> MP3 tidak didukung secara native oleh JDK. Untuk MP3, convert dulu ke WAV  
-> dengan tools seperti ffmpeg: `ffmpeg -i lagu.mp3 lagu.wav`
+> **Format note**: Local files must be in WAV or AIFF format.  
+> MP3 is not natively supported by the JDK. Convert it first using tools like ffmpeg:  
+> `ffmpeg -i song.mp3 song.wav`
 
 ---
 
-## 🔨 Build dari Source
+## 🔨 Build from Source
 
 ### Prerequisites
 - JDK 21
@@ -71,52 +71,3 @@ Install **yt-dlp** dan pastikan ada di PATH sistem:
 git clone https://github.com/yourname/musicplayer-mod.git
 cd musicplayer-mod
 ./gradlew build
-```
-
-File JAR tersedia di `build/libs/musicplayer-*.jar`
-
-### GitHub Actions
-Repo ini sudah dikonfigurasi dengan GitHub Actions.  
-Build otomatis berjalan setiap push ke `main`.  
-Untuk membuat release, buat tag dengan format `v*`:
-
-```bash
-git tag v1.0.0
-git push origin v1.0.0
-```
-
----
-
-## 🏗️ Struktur Proyek
-
-```
-musicplayer-mod/
-├── .github/
-│   └── workflows/
-│       └── build.yml            # GitHub Actions CI/CD
-├── src/
-│   ├── main/
-│   │   ├── java/com/musicplayer/
-│   │   └── resources/
-│   │       ├── fabric.mod.json
-│   │       ├── musicplayer.mixins.json
-│   │       └── assets/musicplayer/lang/en_us.json
-│   └── client/
-│       └── java/com/musicplayer/client/
-│           ├── MusicPlayerClient.java   # Entrypoint & keybinding F9
-│           ├── audio/
-│           │   └── AudioManager.java    # Engine playback audio
-│           └── gui/
-│               └── MusicPlayerScreen.java  # GUI utama
-├── gradle/
-│   └── wrapper/gradle-wrapper.properties
-├── build.gradle
-├── settings.gradle
-└── gradle.properties
-```
-
----
-
-## 📝 Lisensi
-
-MIT License — bebas digunakan dan dimodifikasi.
