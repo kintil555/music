@@ -95,8 +95,7 @@ public class AudioManager {
 
     /**
      * Memutar audio dari YouTube.
-     * Membutuhkan yt-dlp yang sudah ada di PATH sistem.
-     * yt-dlp hanya dipakai untuk mendapat direct audio URL — tidak download file.
+     * yt-dlp akan dicari di PATH, atau di-download otomatis ke config/musicplayer/ jika tidak ada.
      */
     public void playYouTube(String ytUrl) {
         if (!ytUrl.contains("youtube.com/") && !ytUrl.contains("youtu.be/")) {
@@ -107,18 +106,22 @@ public class AudioManager {
         trackName = "Loading from YouTube...";
         worker.submit(() -> {
             try {
-                // Cek apakah yt-dlp tersedia
-                Process check = new ProcessBuilder("yt-dlp", "--version")
-                        .redirectErrorStream(true).start();
-                check.waitFor();
-                if (check.exitValue() != 0) {
-                    fireError("yt-dlp not found on PATH. Install yt-dlp first!");
+                // Cari atau download yt-dlp otomatis
+                String ytDlpPath = YtDlpManager.getOrDownload(msg -> {
+                    trackName = msg;
+                    LOGGER.info("[MusicPlayer] {}", msg);
+                });
+
+                if (ytDlpPath == null) {
+                    fireError("yt-dlp not found and could not be downloaded. Check your internet connection.");
                     return;
                 }
 
-                // Ambil direct audio stream URL (tanpa download)
+                trackName = "Resolving YouTube audio...";
+
+                // Ambil direct audio stream URL (tanpa download file)
                 Process proc = new ProcessBuilder(
-                        "yt-dlp",
+                        ytDlpPath,
                         "--no-playlist",
                         "--get-url",
                         "-f", "bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best",
