@@ -82,13 +82,13 @@ public class MusicPlayerScreen extends Screen {
                 Text.translatable("musicplayer.gui.tab.local"),
                 btn -> switchTab(true)
         ).dimensions(cx, tabY, tabW, 20).build();
-        addRenderableWidget(tabLocalBtn);
+        addDrawableChild(tabLocalBtn);
 
         tabYouTubeBtn = ButtonWidget.builder(
                 Text.translatable("musicplayer.gui.tab.youtube"),
                 btn -> switchTab(false)
         ).dimensions(cx + tabW + 8, tabY, tabW, 20).build();
-        addRenderableWidget(tabYouTubeBtn);
+        addDrawableChild(tabYouTubeBtn);
 
         // ── Text field ────────────────────────────────────────────────────────
         int fieldY = panelY + 60;
@@ -112,24 +112,24 @@ public class MusicPlayerScreen extends Screen {
                 Text.translatable("musicplayer.gui.btn.play"),
                 btn -> handlePlay()
         ).dimensions(cx, btnY, btnW, 20).build();
-        addRenderableWidget(btnPlay);
+        addDrawableChild(btnPlay);
 
         btnPauseResume = ButtonWidget.builder(
                 Text.translatable("musicplayer.gui.btn.pause"),
                 btn -> handlePauseResume()
         ).dimensions(cx + btnW + 4, btnY, btnW, 20).build();
-        addRenderableWidget(btnPauseResume);
+        addDrawableChild(btnPauseResume);
 
         btnStop = ButtonWidget.builder(
                 Text.translatable("musicplayer.gui.btn.stop"),
                 btn -> audio.stop()
         ).dimensions(cx + (btnW + 4) * 2, btnY, btnW, 20).build();
-        addRenderableWidget(btnStop);
+        addDrawableChild(btnStop);
 
         // ── Volume slider ─────────────────────────────────────────────────────
         int volY = panelY + 124;
         volumeSlider = new VolumeSlider(cx, volY, panelW - 60, 20, audio.getVolume());
-        addRenderableWidget(volumeSlider);
+        addDrawableChild(volumeSlider);
 
         // ── Loop button ───────────────────────────────────────────────────────
         int loopY = panelY + 152;
@@ -140,7 +140,7 @@ public class MusicPlayerScreen extends Screen {
                     btn.setMessage(loopLabel());
                 }
         ).dimensions(cx, loopY, 100, 20).build();
-        addRenderableWidget(btnLoop);
+        addDrawableChild(btnLoop);
 
         updateTabStyle();
     }
@@ -278,13 +278,13 @@ public class MusicPlayerScreen extends Screen {
     }
 
     @Override
-    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+    public boolean keyPressed(net.minecraft.client.input.KeyInput input) {
         // Jangan tutup GUI saat tekan Escape — tetap bisa mainkan musik di belakang
-        if (keyCode == 256 /* GLFW_KEY_ESCAPE */) {
+        if (input.keyCode() == org.lwjgl.glfw.GLFW.GLFW_KEY_ESCAPE) {
             this.close();
             return true;
         }
-        return super.keyPressed(keyCode, scanCode, modifiers);
+        return super.keyPressed(input);
     }
 
     // ─────────────────────────────────────────────────────────────────────────

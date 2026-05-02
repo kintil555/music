@@ -10,6 +10,7 @@ import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
 import net.minecraft.client.option.KeyBinding;
 import net.minecraft.client.util.InputUtil;
+import net.minecraft.util.Identifier;
 import org.lwjgl.glfw.GLFW;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -32,11 +33,14 @@ public class MusicPlayerClient implements ClientModInitializer {
     @Override
     public void onInitializeClient() {
         // ── Daftarkan keybinding F9 ───────────────────────────────────────────
+        KeyBinding.Category category = KeyBinding.Category.create(
+                Identifier.of("musicplayer", "main")
+        );
         keyOpenGui = KeyBindingHelper.registerKeyBinding(new KeyBinding(
                 "key.musicplayer.open_gui",          // translation key
                 InputUtil.Type.KEYSYM,               // tipe: keyboard
                 GLFW.GLFW_KEY_F9,                    // default: F9
-                "key.categories.musicplayer"         // kategori di Settings > Controls
+                category                             // kategori di Settings > Controls
         ));
 
         // ── Deteksi keypress tiap tick ────────────────────────────────────────
