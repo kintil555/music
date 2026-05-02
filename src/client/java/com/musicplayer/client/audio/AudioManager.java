@@ -35,8 +35,16 @@ public class AudioManager {
     private volatile String       statusText       = "";
     private volatile AudioQuality quality          = AudioQuality.getDefault();
 
+    // ── Mode: file playback via Clip ──────────────────────────────────────────
     private Clip         clip;
     private FloatControl gainControl;
+
+    // ── Mode: streaming via SourceDataLine ────────────────────────────────────
+    private SourceDataLine   streamLine;
+    private FloatControl     streamGain;
+    private volatile boolean stopStream  = false;
+    private volatile boolean pauseStream = false;
+    private Process          streamProc;
 
     private final ExecutorService worker = Executors.newSingleThreadExecutor(r -> {
         Thread t = new Thread(r, "MusicPlayer-Worker");
@@ -205,34 +213,48 @@ public class AudioManager {
     }
 
     /**
-     * Stream audio YouTube tanpa download file — langsung pipe stdout yt-dlp ke Java Sound.
-     * Kualitas medium (audio-quality 5) selalu dipakai untuk streaming agar lebih cepat.
+     * Stream audio YouTube langsung tanpa download ke disk.
+     *
+     * Arsitektur:
+     *  1. yt-dlp --get-url  → dapat direct URL audio CDN
+     *  2. ffmpeg -i <url> → decode ke raw PCM S16LE 44100Hz stereo → pipe:1
+     *  3. SourceDataLine.write(buf) loop → audio keluar realtime
+     *
+     * SourceDataLine dipakai (bukan Clip) karena Clip.open() butuh ukuran data yang
+     * diketahui di awal. Stream pipe tidak memiliki panjang pasti → "Audio data < 0".
      */
     public void streamYouTube(String ytUrl) {
         if (!ytUrl.contains("youtube.com/") && !ytUrl.contains("youtu.be/")) {
             fireError("Invalid YouTube URL!"); return;
         }
+
+        // Stop apapun yang sedang berjalan
+        stopStreamInternal();
+        closeClip();
+
         state = State.LOADING;
         trackName = "Streaming...";
         downloadProgress = 0;
         statusText = "Preparing stream...";
+        stopStream  = false;
+        pauseStream = false;
 
         worker.submit(() -> {
-            Process ytProc = null;
-            Process ffProc = null;
             try {
+                // ── 1. Cek yt-dlp ─────────────────────────────────────────────
                 statusText = "Checking yt-dlp...";
                 downloadProgress = 5;
                 String ytDlpPath = YtDlpManager.getOrDownload(msg -> statusText = msg);
                 if (ytDlpPath == null) { fireError("yt-dlp not found."); return; }
 
+                // ── 2. Cek ffmpeg ─────────────────────────────────────────────
                 statusText = "Checking ffmpeg...";
                 downloadProgress = 10;
                 String ffmpegPath = FfmpegManager.getOrDownload(msg -> statusText = msg);
                 if (ffmpegPath == null) { fireError("ffmpeg not found."); return; }
 
-                // Langkah 1: yt-dlp ambil URL audio stream
-                statusText = "Resolving stream URL...";
+                // ── 3. Resolve direct audio URL via yt-dlp --get-url ──────────
+                statusText = "Resolving audio URL...";
                 downloadProgress = 15;
                 ProcessBuilder urlPb = new ProcessBuilder(
                         ytDlpPath,
@@ -241,129 +263,141 @@ public class AudioManager {
                         "--get-url",
                         ytUrl
                 );
-                urlPb.redirectErrorStream(false);
+                urlPb.redirectError(ProcessBuilder.Redirect.DISCARD);
                 Process urlProc = urlPb.start();
-                String streamUrl = null;
-                try (java.io.BufferedReader br = new java.io.BufferedReader(
-                        new java.io.InputStreamReader(urlProc.getInputStream()))) {
-                    streamUrl = br.readLine();
+                String directUrl;
+                try (BufferedReader br = new BufferedReader(
+                        new InputStreamReader(urlProc.getInputStream()))) {
+                    directUrl = br.readLine();
                 }
                 urlProc.waitFor();
 
-                if (streamUrl == null || streamUrl.isBlank()) {
-                    fireError("Failed to resolve stream URL."); return;
+                if (directUrl == null || directUrl.isBlank()) {
+                    fireError("Cannot resolve stream URL. Check yt-dlp."); return;
                 }
 
-                statusText = "Buffering stream...";
+                // ── 4. ffmpeg: decode URL → raw PCM S16LE → stdout ────────────
+                statusText = "Buffering...";
                 downloadProgress = 30;
-
-                // Langkah 2: ffmpeg decode stream URL → PCM stdout
                 ProcessBuilder ffPb = new ProcessBuilder(
                         ffmpegPath,
-                        "-i", streamUrl,
-                        "-vn",
-                        "-af", "volume=1.0",
-                        "-ar", "44100",
-                        "-ac", "2",
-                        "-f", "wav",
-                        "-q:a", "5",  // medium quality
-                        "pipe:1"
-                );
-                ffPb.redirectErrorStream(true); // stderr → stdout agar tidak bocor
-                // Pisahkan stderr agar tidak bercampur dengan audio stdout
-                ProcessBuilder ffPb2 = new ProcessBuilder(
-                        ffmpegPath,
-                        "-i", streamUrl,
+                        "-reconnect", "1",
+                        "-reconnect_streamed", "1",
+                        "-reconnect_delay_max", "5",
+                        "-i", directUrl,
                         "-vn",
                         "-ar", "44100",
                         "-ac", "2",
-                        "-f", "wav",
-                        "-q:a", "5",
+                        "-f", "s16le",   // raw PCM — tidak ada WAV header → panjang tidak diketahui, aman untuk stream
                         "pipe:1"
                 );
-                ffPb2.redirectError(ProcessBuilder.Redirect.DISCARD);
-                ffProc = ffPb2.start();
+                ffPb.redirectError(ProcessBuilder.Redirect.DISCARD);
+                streamProc = ffPb.start();
+                final Process proc = streamProc;
 
-                final Process finalFfProc = ffProc;
-                downloadProgress = 50;
-                statusText = "Starting playback...";
-
-                // Bungkus stdout ffmpeg sebagai AudioInputStream
-                java.io.InputStream ffOut = finalFfProc.getInputStream();
-                final AudioInputStream raw;
-                try {
-                    raw = AudioSystem.getAudioInputStream(new java.io.BufferedInputStream(ffOut, 65536));
-                } catch (Exception e) {
-                    fireError("Cannot decode stream: " + e.getMessage());
-                    finalFfProc.destroyForcibly();
-                    return;
-                }
-
-                downloadProgress = 80;
-                statusText = "Streaming...";
-
-                // Konversi ke PCM signed jika perlu
-                AudioFormat fmt = raw.getFormat();
+                // ── 5. Buka SourceDataLine ────────────────────────────────────
                 AudioFormat pcmFmt = new AudioFormat(
                         AudioFormat.Encoding.PCM_SIGNED,
-                        fmt.getSampleRate() > 0 ? fmt.getSampleRate() : 44100f,
-                        16,
-                        fmt.getChannels() > 0 ? fmt.getChannels() : 2,
-                        fmt.getChannels() > 0 ? fmt.getChannels() * 2 : 4,
-                        fmt.getSampleRate() > 0 ? fmt.getSampleRate() : 44100f,
-                        false
+                        44100f, 16, 2, 4, 44100f, false
                 );
-                AudioInputStream pcm = AudioSystem.isConversionSupported(pcmFmt, fmt)
-                        ? AudioSystem.getAudioInputStream(pcmFmt, raw) : raw;
+                DataLine.Info info = new DataLine.Info(SourceDataLine.class, pcmFmt);
+                closeStreamLine();
+                streamLine = (SourceDataLine) AudioSystem.getLine(info);
+                streamLine.open(pcmFmt, 32768); // 32KB buffer
 
-                closeClip();
-                clip = AudioSystem.getClip();
-                clip.open(pcm);
-
-                if (clip.isControlSupported(FloatControl.Type.MASTER_GAIN)) {
-                    gainControl = (FloatControl) clip.getControl(FloatControl.Type.MASTER_GAIN);
-                    applyGain();
+                if (streamLine.isControlSupported(FloatControl.Type.MASTER_GAIN)) {
+                    streamGain = (FloatControl) streamLine.getControl(FloatControl.Type.MASTER_GAIN);
+                    applyStreamGain();
                 }
-                clip.addLineListener(event -> {
-                    if (event.getType() == LineEvent.Type.STOP && state == State.PLAYING) {
-                        if (looping) { clip.setFramePosition(0); clip.start(); }
-                        else {
-                            state = State.IDLE;
-                            finalFfProc.destroyForcibly();
-                            if (onTrackEnd != null) onTrackEnd.run();
-                        }
-                    }
-                });
-                clip.setFramePosition(0);
-                if (looping) clip.loop(Clip.LOOP_CONTINUOUSLY); else clip.start();
 
+                streamLine.start();
                 trackName = ytUrl;
                 state = State.PLAYING;
                 downloadProgress = -1;
                 statusText = "";
-                LOGGER.info("[MusicPlayer] Streaming: {}", ytUrl);
+                LOGGER.info("[MusicPlayer] Stream started: {}", ytUrl);
+
+                // ── 6. Write loop: pipe PCM dari ffmpeg ke SourceDataLine ──────
+                byte[] buf = new byte[8192];
+                InputStream ffOut = proc.getInputStream();
+                int read;
+                while (!stopStream && (read = ffOut.read(buf)) != -1) {
+                    // Pause: tunggu sampai di-resume
+                    while (pauseStream && !stopStream) {
+                        Thread.sleep(50);
+                    }
+                    if (stopStream) break;
+                    streamLine.write(buf, 0, read);
+                }
+
+                // ── 7. Selesai ────────────────────────────────────────────────
+                streamLine.drain();
+                streamLine.stop();
+
+                if (!stopStream) {
+                    state = State.IDLE;
+                    LOGGER.info("[MusicPlayer] Stream finished.");
+                    if (onTrackEnd != null) onTrackEnd.run();
+                }
 
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             } catch (Exception e) {
                 LOGGER.error("[MusicPlayer] Stream error", e);
-                fireError("Stream failed: " + e.getMessage());
+                if (!stopStream) fireError("Stream failed: " + e.getMessage());
             } finally {
-                if (ytProc != null) ytProc.destroyForcibly();
-                // ffProc dibiarkan berjalan selama clip aktif
+                if (streamProc != null) streamProc.destroyForcibly();
             }
         });
     }
 
+    // ── Helper: stop & tutup SourceDataLine ───────────────────────────────────
+    private void stopStreamInternal() {
+        stopStream = true;
+        if (streamProc != null) { streamProc.destroyForcibly(); streamProc = null; }
+        closeStreamLine();
+    }
+
+    private void closeStreamLine() {
+        if (streamLine != null) {
+            try { streamLine.stop(); streamLine.close(); } catch (Exception ignored) {}
+            streamLine = null;
+            streamGain = null;
+        }
+    }
+
+    private void applyStreamGain() {
+        if (streamGain == null) return;
+        float db = volume <= 0f ? streamGain.getMinimum() : (float)(20.0 * Math.log10(volume));
+        streamGain.setValue(clamp(db, streamGain.getMinimum(), streamGain.getMaximum()));
+    }
+
     public void pause() {
-        if (clip != null && clip.isRunning()) { clip.stop(); state = State.PAUSED; }
+        if (streamLine != null && state == State.PLAYING) {
+            pauseStream = true;
+            streamLine.stop();
+            state = State.PAUSED;
+        } else if (clip != null && clip.isRunning()) {
+            clip.stop();
+            state = State.PAUSED;
+        }
     }
 
     public void resume() {
-        if (clip != null && state == State.PAUSED) { clip.start(); state = State.PLAYING; }
+        if (streamLine != null && state == State.PAUSED) {
+            pauseStream = false;
+            streamLine.start();
+            state = State.PLAYING;
+        } else if (clip != null && state == State.PAUSED) {
+            clip.start();
+            state = State.PLAYING;
+        }
     }
 
     public void stop() {
+        stopStream = true;
+        pauseStream = false;
+        stopStreamInternal();
         closeClip();
         state = State.IDLE;
         trackName = "";
@@ -374,9 +408,14 @@ public class AudioManager {
     public void setLooping(boolean loop) {
         this.looping = loop;
         if (clip != null && clip.isOpen()) clip.loop(loop ? Clip.LOOP_CONTINUOUSLY : 0);
+        // SourceDataLine streaming: loop ditangani setelah write-loop selesai (TODO masa depan)
     }
 
-    public void setVolume(float v) { this.volume = clamp(v, 0f, 1f); applyGain(); }
+    public void setVolume(float v) {
+        this.volume = clamp(v, 0f, 1f);
+        applyGain();
+        applyStreamGain();
+    }
 
     public void shutdown() { stop(); worker.shutdownNow(); }
 
