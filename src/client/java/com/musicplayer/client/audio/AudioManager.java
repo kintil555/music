@@ -7,10 +7,6 @@ import org.slf4j.LoggerFactory;
 
 import javax.sound.sampled.*;
 import java.io.*;
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.concurrent.ExecutorService;
@@ -96,6 +92,7 @@ public class AudioManager {
     /**
      * Memutar audio dari YouTube.
      * yt-dlp akan dicari di PATH, atau di-download otomatis ke config/musicplayer/ jika tidak ada.
+     * Audio dikonversi ke WAV sementara agar kompatibel dengan javax.sound.
      */
     public void playYouTube(String ytUrl) {
         if (!ytUrl.contains("youtube.com/") && !ytUrl.contains("youtu.be/")) {
@@ -105,69 +102,123 @@ public class AudioManager {
         state = State.LOADING;
         trackName = "Loading from YouTube...";
         worker.submit(() -> {
+            Path tempWav = null;
             try {
-                // Cari atau download yt-dlp otomatis
+                // 1. Cari atau download yt-dlp otomatis
                 String ytDlpPath = YtDlpManager.getOrDownload(msg -> {
                     trackName = msg;
                     LOGGER.info("[MusicPlayer] {}", msg);
                 });
 
                 if (ytDlpPath == null) {
-                    fireError("yt-dlp not found and could not be downloaded. Check your internet connection.");
+                    fireError("yt-dlp not found and could not be downloaded. Check internet.");
                     return;
                 }
 
-                trackName = "Resolving YouTube audio...";
+                // 2. Buat temp file untuk WAV output
+                tempWav = Files.createTempFile("musicplayer_yt_", ".wav");
+                final Path wavFile = tempWav;
+                // Hapus dulu agar yt-dlp bisa menulis (beberapa OS menolak overwrite)
+                Files.deleteIfExists(wavFile);
 
-                // Ambil direct audio stream URL (tanpa download file)
-                Process proc = new ProcessBuilder(
+                trackName = "Downloading & converting audio...";
+                LOGGER.info("[MusicPlayer] Downloading YouTube audio to temp WAV...");
+
+                // 3. Download + konversi ke WAV via yt-dlp
+                // yt-dlp --no-playlist -x --audio-format wav -o <output> <url>
+                ProcessBuilder pb = new ProcessBuilder(
                         ytDlpPath,
                         "--no-playlist",
-                        "--get-url",
-                        "-f", "bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best",
+                        "-x",                           // extract audio
+                        "--audio-format", "wav",        // konversi ke WAV
+                        "--audio-quality", "0",         // kualitas terbaik
+                        "-o", wavFile.toString(),       // output path
                         ytUrl
-                ).redirectErrorStream(true).start();
+                );
+                pb.redirectErrorStream(true);
+                Process proc = pb.start();
 
-                String directUrl;
+                // Log output yt-dlp untuk debug
+                StringBuilder ytOutput = new StringBuilder();
                 try (BufferedReader br = new BufferedReader(
                         new InputStreamReader(proc.getInputStream()))) {
-                    directUrl = br.lines()
-                            .filter(l -> l.startsWith("http"))
-                            .findFirst()
-                            .orElse(null);
+                    String line;
+                    while ((line = br.readLine()) != null) {
+                        LOGGER.debug("[yt-dlp] {}", line);
+                        ytOutput.append(line).append("\n");
+                        // Update status dari output yt-dlp
+                        if (line.contains("[download]") || line.contains("[ExtractAudio]")) {
+                            trackName = "yt-dlp: " + line.replaceAll("\\[.*?]\\s*", "").trim();
+                        }
+                    }
                 }
                 proc.waitFor();
 
-                if (directUrl == null || directUrl.isBlank()) {
-                    fireError("Failed to resolve audio stream from YouTube.");
+                if (proc.exitValue() != 0) {
+                    LOGGER.error("[MusicPlayer] yt-dlp failed:\n{}", ytOutput);
+                    fireError("yt-dlp failed (exit " + proc.exitValue() + "). Check logs.");
                     return;
                 }
 
-                final String url = directUrl.trim();
-                LOGGER.info("[MusicPlayer] Resolved URL: {}", url.substring(0, Math.min(80, url.length())));
+                // yt-dlp kadang menambah ekstensi sendiri, cari file yang terbentuk
+                Path actualWav = findOutputFile(wavFile);
+                if (actualWav == null || !Files.exists(actualWav)) {
+                    LOGGER.error("[MusicPlayer] Output WAV tidak ditemukan setelah yt-dlp");
+                    fireError("Conversion failed: output file not found.");
+                    return;
+                }
 
-                // Stream langsung dari URL
-                loadAndPlay(() -> {
-                    HttpClient client = HttpClient.newBuilder()
-                            .followRedirects(HttpClient.Redirect.ALWAYS)
-                            .build();
-                    HttpResponse<InputStream> resp = client.send(
-                            HttpRequest.newBuilder(new URI(url))
-                                    .header("User-Agent", "Mozilla/5.0")
-                                    .build(),
-                            HttpResponse.BodyHandlers.ofInputStream()
-                    );
-                    return AudioSystem.getAudioInputStream(
-                            new BufferedInputStream(resp.body()));
-                }, ytUrl);
+                final Path finalWav = actualWav;
+                LOGGER.info("[MusicPlayer] WAV ready: {} ({} KB)",
+                        finalWav.getFileName(),
+                        Files.size(finalWav) / 1024);
+
+                trackName = "Loading audio...";
+
+                // 4. Play WAV file
+                loadAndPlay(() -> AudioSystem.getAudioInputStream(finalWav.toFile()), ytUrl);
+
+                // 5. Hapus temp file setelah clip selesai (dengan delay kecil)
+                Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+                    try { Files.deleteIfExists(finalWav); } catch (Exception ignored) {}
+                }));
 
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             } catch (Exception e) {
                 LOGGER.error("[MusicPlayer] YouTube error", e);
                 fireError("Failed to fetch audio: " + e.getMessage());
+                // Cleanup temp file jika error
+                if (tempWav != null) {
+                    try { Files.deleteIfExists(tempWav); } catch (Exception ignored) {}
+                }
             }
         });
+    }
+
+    /**
+     * yt-dlp terkadang menambah ekstensi seperti .wav.wav atau mengganti nama.
+     * Cari file output yang paling cocok.
+     */
+    private Path findOutputFile(Path basePath) {
+        // Cek path exact
+        if (Files.exists(basePath)) return basePath;
+
+        // Cek dengan .wav tambahan (yt-dlp kadang rename)
+        Path withExt = basePath.resolveSibling(basePath.getFileName() + ".wav");
+        if (Files.exists(withExt)) return withExt;
+
+        // Cari di direktori temp file terbaru yang mengandung nama yang sama
+        try {
+            String baseName = basePath.getFileName().toString().replace(".wav", "");
+            return Files.list(basePath.getParent())
+                    .filter(p -> p.getFileName().toString().startsWith(baseName))
+                    .filter(p -> p.getFileName().toString().endsWith(".wav"))
+                    .findFirst()
+                    .orElse(null);
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     public void pause() {
