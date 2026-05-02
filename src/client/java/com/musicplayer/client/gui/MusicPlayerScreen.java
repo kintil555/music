@@ -280,7 +280,7 @@ public class MusicPlayerScreen extends Screen {
     @Override
     public boolean keyPressed(net.minecraft.client.input.KeyInput input) {
         // Jangan tutup GUI saat tekan Escape — tetap bisa mainkan musik di belakang
-        if (input.keyCode() == org.lwjgl.glfw.GLFW.GLFW_KEY_ESCAPE) {
+        if (input.getKeycode() == org.lwjgl.glfw.GLFW.GLFW_KEY_ESCAPE) {
             this.close();
             return true;
         }
