@@ -11,7 +11,6 @@ import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.widget.ButtonWidget;
 import net.minecraft.client.gui.widget.SliderWidget;
 import net.minecraft.client.gui.widget.TextFieldWidget;
-import net.minecraft.client.input.Click;
 import net.minecraft.text.Text;
 
 import java.nio.file.Paths;
@@ -196,7 +195,7 @@ public class MusicPlayerScreen extends Screen {
 
     @Override
     public void render(DrawContext ctx, int mouseX, int mouseY, float delta) {
-        super.renderBackground(ctx);
+        super.renderBackground(ctx, mouseX, mouseY, delta);
 
         // Panel background
         ctx.fill(panelX - 2, panelY - 2, panelX + panelW + 2, panelY + panelH + 2, BORDER_COLOR);
@@ -397,8 +396,7 @@ public class MusicPlayerScreen extends Screen {
         }
     }
 
-    @Override
-    public void renderBackground(DrawContext ctx) { /* no-op */ }
+    public void renderBackground(DrawContext ctx, int mx, int my, float delta) { /* no-op */ }
 
     // ─────────────────────────────────────────────────────────────────────────
     // Mouse events
@@ -407,10 +405,7 @@ public class MusicPlayerScreen extends Screen {
     private long lastClickTime = 0;
     private int  lastClickIdx  = -1;
 
-    @Override
-    public boolean mouseClicked(net.minecraft.client.input.Click click, boolean fromTouch) {
-        double mx = click.x();
-        double my = click.y();
+    public boolean mouseClicked(double mx, double my, int button) {
         // Tutup dropdown jika klik di luar
         if (qualityDropdownOpen) {
             int ddX = panelX + panelW - 120;
@@ -451,7 +446,7 @@ public class MusicPlayerScreen extends Screen {
             }
         }
 
-        return super.mouseClicked(click, fromTouch);
+        return super.mouseClicked(mx, my, button);
     }
 
     @Override
