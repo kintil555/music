@@ -19,4 +19,14 @@ public enum AudioQuality {
     }
 
     public static AudioQuality getDefault() { return MEDIUM; }
+
+    /** Label pendek untuk tombol Quality di GUI */
+    public String shortLabel() {
+        return switch (this) {
+            case LOW    -> "Low";
+            case MEDIUM -> "Medium";
+            case HIGH   -> "High";
+            case BEST   -> "Best";
+        };
+    }
 }
