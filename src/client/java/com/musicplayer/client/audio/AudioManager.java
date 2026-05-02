@@ -317,36 +317,48 @@ public class AudioManager {
                 statusText = "";
                 LOGGER.info("[MusicPlayer] Stream started: {}", ytUrl);
 
-                // ── 6. Write loop: pipe PCM dari ffmpeg ke SourceDataLine ──────
-                byte[] buf = new byte[8192];
-                InputStream ffOut = proc.getInputStream();
-                int read;
-                while (!stopStream && (read = ffOut.read(buf)) != -1) {
-                    // Pause: tunggu sampai di-resume
-                    while (pauseStream && !stopStream) {
-                        Thread.sleep(50);
+                // ── 6. Write-loop di daemon thread terpisah ───────────────────
+                // Worker thread SELESAI di sini supaya tidak diblokir selama lagu.
+                final SourceDataLine finalLine = streamLine;
+                Thread writeThread = new Thread(() -> {
+                    try {
+                        byte[] buf = new byte[8192];
+                        InputStream ffOut = proc.getInputStream();
+                        int read;
+                        while (!stopStream && (read = ffOut.read(buf)) != -1) {
+                            while (pauseStream && !stopStream) {
+                                try { Thread.sleep(30); } catch (InterruptedException ie) {
+                                    Thread.currentThread().interrupt(); return;
+                                }
+                            }
+                            if (stopStream) break;
+                            finalLine.write(buf, 0, read);
+                        }
+                        finalLine.drain();
+                        finalLine.stop();
+                        if (!stopStream) {
+                            state = State.IDLE;
+                            LOGGER.info("[MusicPlayer] Stream finished.");
+                            if (onTrackEnd != null) onTrackEnd.run();
+                        }
+                    } catch (Exception e) {
+                        if (!stopStream) {
+                            LOGGER.error("[MusicPlayer] Stream write error", e);
+                            fireError("Stream error: " + e.getMessage());
+                        }
+                    } finally {
+                        proc.destroyForcibly();
                     }
-                    if (stopStream) break;
-                    streamLine.write(buf, 0, read);
-                }
-
-                // ── 7. Selesai ────────────────────────────────────────────────
-                streamLine.drain();
-                streamLine.stop();
-
-                if (!stopStream) {
-                    state = State.IDLE;
-                    LOGGER.info("[MusicPlayer] Stream finished.");
-                    if (onTrackEnd != null) onTrackEnd.run();
-                }
+                }, "MusicPlayer-StreamWrite");
+                writeThread.setDaemon(true);
+                writeThread.setPriority(Thread.NORM_PRIORITY - 1);
+                writeThread.start();
 
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             } catch (Exception e) {
-                LOGGER.error("[MusicPlayer] Stream error", e);
+                LOGGER.error("[MusicPlayer] Stream setup error", e);
                 if (!stopStream) fireError("Stream failed: " + e.getMessage());
-            } finally {
-                if (streamProc != null) streamProc.destroyForcibly();
             }
         });
     }
